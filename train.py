@@ -3,6 +3,7 @@ import torch.nn as nn
 from torch.utils.data import DataLoader
 from torch import optim
 from torch.optim.lr_scheduler import StepLR
+import matplotlib.pyplot as plt
 from datasets.datasets import DriveDataset
 from models.networks import UNet
 
