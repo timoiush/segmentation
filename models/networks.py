@@ -49,7 +49,7 @@ class UNet0(nn.Module):
     
     
 # U-Net with 2D/3D versions
-class UNet2(nn.Module):
+class UNet(nn.Module):
     def __init__(
             self,
             in_channels=3,
