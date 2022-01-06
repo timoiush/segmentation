@@ -3,7 +3,7 @@ import torch.nn as nn
 from blocks import *
 
 
-class UNet(nn.Module):
+class UNet0(nn.Module):
     def __init__(self, in_channels=3, out_channels=1, channels=64):
         super().__init__()
 
@@ -46,3 +46,91 @@ class UNet(nn.Module):
         d7 = self.dec7(d6, e1)
 
         return self.last_layer(d7)
+    
+    
+# U-Net with 2D/3D versions
+class UNet2(nn.Module):
+    def __init__(
+            self,
+            in_channels=3,
+            out_channels=1,
+            blocks=4,
+            channels=32,
+            activation='leaky',
+            normalization='instance',
+            dim=2,
+            use_attention=False
+            ):
+        super().__init__()
+        self.in_channels = in_channels
+        self.out_channels = out_channels
+        self.blocks = blocks
+        self.channels = channels
+        self.activation = activation
+        self.normalization = normalization
+        self.dim = dim
+        self.use_attention = use_attention
+        self.pooling = pooling_layer(pooling='max', dim=self.dim)
+        self.encoder_blocks = []
+        self.decoder_blocks = []
+        self.attention_gates = []  #AttentionBlock(256, 128, 128)
+
+        # Contracting path: encoder
+        for i in range(self.blocks):
+            in_ch = self.in_channels if i == 0 else out_ch
+            out_ch = self.channels * (2 ** i)
+            bottleneck = False if i < self.blocks - 1 else True
+            encoder_block = EncoderBlock(
+                in_ch,
+                out_ch,
+                activation=self.activation,
+                normalization=self.normalization,
+                dim=self.dim
+            )
+            self.encoder_blocks.append(encoder_block)
+        self.encoder_blocks = nn.ModuleList(self.encoder_blocks)
+
+        # Expanding path: attention gates and decoder
+        for i in range(self.blocks - 1):
+            in_ch = out_ch
+            out_ch = in_ch // 2
+            if self.dim == 2:
+                att_gate = AttentionBlock(in_ch, out_ch, out_ch)
+            elif self.dim == 3:
+                att_gate = AttentionBlock_3D(in_ch, out_ch, out_ch)
+            self.attention_gates.append(att_gate)
+            
+            decoder_block = DecoderBlock(
+                in_ch,
+                out_ch,
+                activation=self.activation,
+                normalization=self.normalization,
+                dim=self.dim)
+            self.decoder_blocks.append(decoder_block)
+        self.decoder_blocks = nn.ModuleList(self.decoder_blocks)
+
+        self.conv = conv_layer(
+            out_ch,
+            self.out_channels,
+            kernel_size=3,
+            padding=1,
+            dim=self.dim)
+
+    def forward(self, x):
+        encoder_outputs = []
+
+        for i, block in enumerate(self.encoder_blocks):
+            xs = block(x)
+            if i < self.blocks -1:
+                x = self.pooling(xs)
+            else:
+                x = xs
+            encoder_outputs.append(xs)
+
+        for i, block in enumerate(self.decoder_blocks):
+            gate = self.attention_gates[i]
+            skip_input = encoder_outputs[-(i + 2)]
+            if self.use_attention:
+                skip_input = gate(x, skip_input)
+            x = block(x, skip_input)        
+        return self.conv(x)
