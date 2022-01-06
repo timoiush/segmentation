@@ -116,3 +116,59 @@ class DecoderBlock(nn.Module):
         x = torch.cat((x, skip_input), dim=1)
         x = self.layers(x)
         return x
+
+    
+class AttentionBlock(nn.Module):
+    def __init__(self, F_g, F_x, F_int, dim=2):
+        super().__init__()
+        self.W_g = nn.Sequential(
+            nn.Conv2d(in_channels=F_g, out_channels=F_int, kernel_size=1, stride=1, padding=0),
+            nn.BatchNorm2d(F_int)
+        )
+        self.W_x = nn.Sequential(
+            nn.Conv2d(in_channels=F_x, out_channels=F_int, kernel_size=1, stride=2, padding=0),
+            nn.BatchNorm2d(F_int)
+        )
+        self.psi = nn.Sequential(
+            nn.Conv2d(in_channels=F_int, out_channels=1, kernel_size=1, stride=1, padding=0),
+            nn.BatchNorm2d(1),
+            nn.Sigmoid()
+        )
+        self.relu = nn.ReLU()
+        self.up = nn.Upsample(scale_factor=2, mode='bilinear')
+
+    def forward(self, g, x):
+        gl = self.W_g(g)
+        xl = self.W_x(x)
+        psi = self.relu(gl + xl)
+        psi = self.psi(psi)
+        out = x * self.up(psi)
+        return out
+
+    
+class AttentionBlock_3D(nn.Module):
+    def __init__(self, F_g, F_x, F_int, dim=2):
+        super().__init__()
+        self.W_g = nn.Sequential(
+            nn.Conv3d(in_channels=F_g, out_channels=F_int, kernel_size=1, stride=1, padding=0),
+            nn.BatchNorm3d(F_int)
+        )
+        self.W_x = nn.Sequential(
+            nn.Conv3d(in_channels=F_x, out_channels=F_int, kernel_size=1, stride=(2, 2, 2), padding=0),
+            nn.BatchNorm3d(F_int)
+        )
+        self.psi = nn.Sequential(
+            nn.Conv3d(in_channels=F_int, out_channels=1, kernel_size=1, stride=1, padding=0),
+            nn.BatchNorm3d(1),
+            nn.Sigmoid()
+        )
+        self.relu = nn.ReLU()
+        self.up = nn.Upsample(scale_factor=(2,2,2), mode='trilinear')
+
+    def forward(self, g, x):
+        gl = self.W_g(g)
+        xl = self.W_x(x)
+        psi = self.relu(gl + xl)
+        psi = self.psi(psi)
+        out = x * self.up(psi)
+        return out
